@@ -463,6 +463,270 @@ fun Viewer(
     }
 }
 
+@Composable
+fun ZoomImage(file: File) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+
+    AsyncImage(
+        model = file,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = {
+                    if (scale > 1f) {
+                        scale = 1f
+                        offset = Offset.Zero
+                    } else {
+                        scale = 2.5f
+                    }
+                })
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var event: PointerEvent
+                    do {
+                        event = awaitPointerEvent()
+                        val zoom = event.calculateZoom()
+                        val pan = event.calculatePan()
+                        if (event.changes.size > 1 || scale > 1f) {
+                            scale = (scale * zoom).coerceIn(1f, 5f)
+                            offset = if (scale > 1f) offset + pan else Offset.Zero
+                            event.changes.forEach {
+                                if (it.positionChanged()) it.consume()
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = offset.x
+                translationY = offset.y
+            }
+    )
+}
+
+@Composable
+fun SetupDialog(
+    groom: String, bride: String, date: String, place: String,
+    onSave: (String, String, String, String) -> Unit, onDismiss: () -> Unit
+) {
+    var g by remember { mutableStateOf(groom) }
+    var b by remember { mutableStateOf(bride) }
+    var d by remember { mutableStateOf(date) }
+    var p by remember { mutableStateOf(place) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wedding details") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = g,
+                    onValueChange = { g = it },
+                    label = { Text("Groom's name") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = b,
+                    onValueChange = { b = it },
+                    label = { Text("Bride's.White.copy(alpha = 0.85f), fontSize = 16.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(40.dp))
+            OutlinedButton(onClick = onOpen, border = BorderStroke(1.dp, Gold)) {
+                Text("Open Album", color = Gold)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Gallery(
+    dir: File, visible: List<String>, total: Int, showFavs: Boolean, title: String,
+    onFilter: (Boolean) -> Unit, onBack: () -> Unit, onAdd: () -> Unit,
+    onPlay: () -> Unit, onOpen: (Int) -> Unit
+) {
+    val ctx = LocalContext.current
+    Scaffold(
+        containerColor = Cream,
+        topBar = {
+            TopAppBar(
+                title = { Text(title, fontFamily = FontFamily.Cursive, fontSize = 26.sp) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (total > 0) {
+                        IconButton(onClick = onPlay) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Slideshow")
+                        }
+                    }
+                    IconButton(onClick = onAdd) {
+                        Icon(Icons.Default.Add, contentDescription = "Add photos")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Cream)
+            )
+        }
+    ) { pad ->
+        Column(Modifier.padding(pad)) {
+            Row(
+                Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = !showFavs,
+                    onClick = { onFilter(false) },
+                    label = { Text("All ($total)") }
+                )
+                FilterChip(
+                    selected = showFavs,
+                    onClick = { onFilter(true) },
+                    label = { Text("Favorites") }
+                )
+            }
+            if (visible.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Favorite,
+                            contentDescription = null,
+                            tint = Gold,
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(if (total == 0) "Add your first memories" else "No favorites yet")
+                        if (total == 0) {
+                            Spacer(Modifier.height(16.dp))
+                            Button(onClick = onAdd) { Text("Add photos") }
+                        }
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    itemsIndexed(visible) { i, name ->
+                        AsyncImage(
+                            model = ImageRequest.Builder(ctx)
+                                .data(File(dir, name))
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .aspectRatio(0.8f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onOpen(i) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Viewer(
+    dir: File, files: List<String>, start: Int, favs: List<String>, slideshow: Boolean,
+    onSlideshow: (Boolean) -> Unit, onFav: (String) -> Unit,
+    onDelete: (String) -> Unit, onClose: () -> Unit
+) {
+    val pager = rememberPagerState(
+        initialPage = start.coerceIn(0, (files.size - 1).coerceAtLeast(0))
+    ) { files.size }
+    val latest by rememberUpdatedState(files)
+    var confirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(files.isEmpty()) {
+        if (files.isEmpty()) onClose()
+    }
+
+    LaunchedEffect(slideshow) {
+        while (slideshow && latest.isNotEmpty()) {
+            delay(3500)
+            if (latest.isNotEmpty()) {
+                pager.animateScrollToPage((pager.currentPage + 1) % latest.size)
+            }
+        }
+    }
+
+    val current = files.getOrNull(pager.currentPage)
+
+    Box(
+        Modifier.fillMaxSize().background(Color.Black)
+            .pointerInput(Unit) { detectTapGestures { } }
+    ) {
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            files.getOrNull(page)?.let { ZoomImage(File(dir, it)) }
+        }
+        Row(
+            Modifier.fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(listOf(Color(0x99000000), Color.Transparent))
+                )
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            }
+            Text("${pager.currentPage + 1} / ${files.size}", color = Color.White)
+            Spacer(Modifier.weight(1f))
+            if (slideshow) {
+                TextButton(onClick = { onSlideshow(false) }) {
+                    Text("Stop", color = Color.White)
+                }
+            } else {
+                IconButton(onClick = { onSlideshow(true) }) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Slideshow", tint = Color.White)
+                }
+            }
+            if (current != null) {
+                val isFav = current in favs
+                IconButton(onClick = { onFav(current) }) {
+                    Icon(
+                        if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (isFav) Color(0xFFE57373) else Color.White
+                    )
+                }
+            }
+            IconButton(onClick = { confirm = true }) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+            }
+        }
+    }
+
+    if (confirm && current != null) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Delete photo?") },
+            text = { Text("This photo will be removed from the album.") },
+            confirmButton = {
+                TextButton(onClick = { confirm = false; onDelete(current) }) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
 // ⭐ ዋናው ማስተካከያ እዚህ ነው
 @Composable
 fun ZoomImage(file: File) {
