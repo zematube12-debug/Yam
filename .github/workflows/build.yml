@@ -6,6 +6,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,45 +21,70 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
 
-      - name: Setup Android SDK
+      - name: Verify Android SDK location
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls -la $ANDROID_HOME || true
+          ls -la $ANDROID_HOME/cmdline-tools || true
+
+      - name: Install Android SDK packages
         run: |
           set -e
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-
-          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort -V -r | head -n1)
-          if [ -z "$SDKMANAGER" ]; then
-            mkdir -p "$ANDROID_HOME/cmdline-tools"
-            cd "$ANDROID_HOME/cmdline-tools"
-            curl -sSL -o cmd.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -q -o cmd.zip && rm -f cmd.zip
-            [ -d "cmdline-tools" ] && [ ! -d "latest" ] && mv cmdline-tools latest
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f | sort -V -r | head -n1)
           fi
+          echo "Using sdkmanager: $SDKMANAGER"
+          "$SDKMANAGER" --version || true
 
-          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install "cmdline-tools;latest" || true
-          [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ] && \
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # cmdline-tools መጀመሪያ አረጋግጥ/አዘምን
+          yes | "$SDKMANAGER" --sdk_root=$ANDROID_HOME --install "cmdline-tools;latest" || true
 
-          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
+          SDKMANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
 
+          # የሚያስፈልጉትን ፓኬጆች ጫን
+          yes | "$SDKMANAGER" --sdk_root=$ANDROID_HOME --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+
+          # ፍቃዶችን ተቀበል
+          yes | "$SDKMANAGER" --sdk_root=$ANDROID_HOME --licenses || true
+
+          # PATH አዘጋጅ
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
 
+      - name: Verify SDK installation
+        run: |
+          ls -la $ANDROID_HOME/platforms/ || true
+          ls -la $ANDROID_HOME/build-tools/ || true
+          which sdkmanager || true
+
+      - name: Generate Gradle wrapper (if missing)
+        run: |
+          if [ ! -f ./gradlew ]; then
+            echo "gradlew not found — generating wrapper..."
+            gradle wrapper --gradle-version 8.9
+          else
+            echo "gradlew already exists"
+          fi
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
