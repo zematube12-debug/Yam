@@ -21,59 +21,28 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+          log-accepted-android-sdk-licenses: false
+
       - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
 
-      - name: Verify Android SDK location
+      - name: Verify Android SDK
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls -la $ANDROID_HOME || true
-          ls -la $ANDROID_HOME/cmdline-tools || true
-
-      - name: Install Android SDK packages
-        run: |
-          set -e
-          SDKMANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name sdkmanager -type f | sort -V -r | head -n1)
-          fi
-          echo "Using sdkmanager: $SDKMANAGER"
-          "$SDKMANAGER" --version || true
-
-          # cmdline-tools መጀመሪያ አረጋግጥ/አዘምን
-          yes | "$SDKMANAGER" --sdk_root=$ANDROID_HOME --install "cmdline-tools;latest" || true
-
-          SDKMANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-
-          # የሚያስፈልጉትን ፓኬጆች ጫን
-          yes | "$SDKMANAGER" --sdk_root=$ANDROID_HOME --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-
-          # ፍቃዶችን ተቀበል
-          yes | "$SDKMANAGER" --sdk_root=$ANDROID_HOME --licenses || true
-
-          # PATH አዘጋጅ
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
-
-      - name: Verify SDK installation
-        run: |
           ls -la $ANDROID_HOME/platforms/ || true
           ls -la $ANDROID_HOME/build-tools/ || true
-          which sdkmanager || true
 
       - name: Generate Gradle wrapper (if missing)
         run: |
           if [ ! -f ./gradlew ]; then
-            echo "gradlew not found — generating wrapper..."
             gradle wrapper --gradle-version 8.9
-          else
-            echo "gradlew already exists"
           fi
 
       - name: Make gradlew executable
