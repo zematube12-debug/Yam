@@ -30,6 +30,7 @@ dependencies {
     implementation(bom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 }
