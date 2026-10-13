@@ -17,18 +17,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # ─── Android SDK በእጅ ማዋቀር (setup-android action ሳይጠቀሙ) ───
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
       - name: Setup Android SDK (manual)
         run: |
           set -e
-
-          # 1) Runner ላይ ያለውን SDK ስር አድራሻ ያግኙ
           if [ -d "/usr/local/lib/android/sdk" ]; then
             export ANDROID_HOME=/usr/local/lib/android/sdk
-          elif [ -n "$ANDROID_HOME" ]; then
-            export ANDROID_HOME="$ANDROID_HOME"
-          elif [ -n "$ANDROID_SDK_ROOT" ]; then
-            export ANDROID_HOME="$ANDROID_SDK_ROOT"
           else
             export ANDROID_HOME="$HOME/android-sdk"
           fi
@@ -37,74 +35,31 @@ jobs:
 
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$ANDROID_HOME"
 
-          # 2) ያለውን sdkmanager ያግኙ (ማንኛውንም ስሪት)
-          SDKMANAGER=""
-          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          else
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort -V -r | head -n1)
-          fi
-
-          # 3) ምንም ካልተገኘ — cmdline-tools ን ከ Google ያውርዱ
-          if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
-            echo "sdkmanager not found. Downloading cmdline-tools..."
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort -V -r | head -n1)
+          if [ -z "$SDKMANAGER" ]; then
             mkdir -p "$ANDROID_HOME/cmdline-tools"
             cd "$ANDROID_HOME/cmdline-tools"
             curl -sSL -o cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -q -o cmdtools.zip
-            rm -f cmdtools.zip
-            if [ -d "cmdline-tools" ] && [ ! -d "latest" ]; then
-              mv cmdline-tools latest
-            fi
+            unzip -q -o cmdtools.zip && rm -f cmdtools.zip
+            [ -d "cmdline-tools" ] && [ ! -d "latest" ] && mv cmdline-tools latest
             SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           fi
 
-          echo "Using sdkmanager: $SDKMANAGER"
-          "$SDKMANAGER" --version || true
-
-          # 4) cmdline-tools;latest ን መጀመሪያ ጫን (ዋናው ማስተካከያ!)
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install "cmdline-tools;latest" || true
-
-          # 5) latest ከተጫነ በኋላ ወደ እሱ ቀይር
-          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+          [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ] && \
             SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-            echo "Switched to latest: $SDKMANAGER"
-          fi
 
-          # 6) የሚያስፈልጉትን packages ጫን
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-
-          # 7) ፍቃዶችን ተቀበል
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
 
-          # 8) PATH ላይ ጨምር
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
 
-      # ─── Gradle setup ───
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Verify Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls -la "$ANDROID_HOME/platforms/" || true
-          ls -la "$ANDROID_HOME/build-tools/" || true
-          which sdkmanager || true
-
+      # ★ ዋናው ማስተካከያ: ./gradlew ፋንታ gradle ተጠቅሟል
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
