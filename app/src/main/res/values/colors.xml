@@ -1,1 +1,6 @@
-
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="gold">#B8935A</color>
+    <color name="cream">#FBF7F0</color>
+    <color name="ink">#2B2623</color>
+</resources>
